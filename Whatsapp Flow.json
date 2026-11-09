@@ -1,0 +1,339 @@
+{
+  "name": "Whatsapp Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flow",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2f0cdb86-c979-4385-ba24-193e171f8ace",
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -144,
+        64
+      ],
+      "webhookId": "7116a2e3-c07f-4638-9140-3548a7957d15",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const decryptedPayload = $json.decryptedPayload;\n\nif (typeof decryptedPayload !== \"string\" || !decryptedPayload.trim()) {\n  throw new Error(\"Decrypted payload is missing.\");\n}\n\nlet payload;\ntry {\n  payload = JSON.parse(decryptedPayload);\n} catch (error) {\n  throw new Error(`Unable to parse decrypted WhatsApp Flow payload: ${error.message}`);\n}\n\nif (!payload.screen) {\n  throw new Error(\"The decrypted payload does not contain a screen value.\");\n}\n\nreturn [{\n  json: {\n    screen: payload.screen,\n    flow_token: payload.flow_token ?? \"\",\n    date: payload.data?.date ?? null,\n    data: payload.data ?? {},\n    decryptedPayload\n  }\n}];"
+      },
+      "id": "e3e3612d-61fa-40ac-a06d-b24f47fdd9ce",
+      "name": "Json Parser",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        624,
+        64
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "aa929857-8458-49da-a027-0b4d4a7f75f7",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.screen }}",
+                    "rightValue": "APPOINTMENT"
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "d83dd890-5ee5-480e-b338-efc5eb26b494",
+                    "operator": {
+                      "name": "filter.operator.equals",
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.screen }}",
+                    "rightValue": "DATE_SELECTION_SCREEN"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "76f42f7e-185f-46f1-b505-108d093aefdc",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        944,
+        64
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "8007806e-e8d3-41cb-b383-2a682a128979",
+      "name": "Respond to Webhook1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1712,
+        -32
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.data ?? {};\nconst appointmentRows =\n  (Array.isArray(data.appointments) && data.appointments) ||\n  (Array.isArray(data.available_appointments) && data.available_appointments) ||\n  (Array.isArray(data.slots) && data.slots) ||\n  (Array.isArray(data) && data) ||\n  [];\n\nconst grouped = {};\n\nfor (const appointment of appointmentRows) {\n  const dateValue = appointment.appointment_date ?? appointment.date;\n  const timeValue = appointment.start_time ?? appointment.time;\n\n  if (!dateValue || !timeValue) continue;\n\n  const date = String(dateValue).slice(0, 10);\n  if (!grouped[date]) grouped[date] = [];\n  grouped[date].push(String(timeValue));\n}\n\nif (Object.keys(grouped).length === 0 && data.date && Array.isArray(data.start_times)) {\n  grouped[String(data.date).slice(0, 10)] = data.start_times.map(String);\n}\n\nconst selectedDate = data.date ? String(data.date).slice(0, 10) : Object.keys(grouped)[0] ?? \"\";\nconst startTimes = selectedDate ? (grouped[selectedDate] ?? []) : [];\n\nreturn [{\n  json: {\n    appointment_date: selectedDate,\n    start_times: startTimes\n  }\n}];"
+      },
+      "id": "01aa7b1b-9e2c-4096-b7f6-e45d48cbc2c4",
+      "name": "Data Extraction Code",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1280,
+        -32
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "972df34b-cdf0-4fba-aa24-9447690faddd",
+      "name": "Respond to Webhook2",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1712,
+        208
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.data ?? {};\nconst seats = data.seats;\n\nif (!Array.isArray(seats)) {\n  throw new Error(\"The DATE_SELECTION_SCREEN payload must contain a data.seats array.\");\n}\n\nreturn [{\n  json: {\n    seats: seats.map(seat => String(seat))\n  }\n}];"
+      },
+      "id": "2646355b-15f3-4519-ab71-48f83e7e2a2f",
+      "name": "Data Extraction Code1",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1280,
+        208
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst encryptedFlowData = body.encrypted_flow_data;\nconst encryptedAesKey = body.encrypted_aes_key;\nconst initialVector = body.initial_vector;\n\nif (!encryptedFlowData || !encryptedAesKey || !initialVector) {\n  throw new Error(\"Webhook payload must include encrypted_flow_data, encrypted_aes_key, and initial_vector.\");\n}\n\nreturn [{\n  json: {\n    encryptedFlowData: Buffer.from(encryptedFlowData, \"base64\"),\n    encryptedAesKey: Buffer.from(encryptedAesKey, \"base64\"),\n    initialVector: Buffer.from(initialVector, \"base64\")\n  }\n}];"
+      },
+      "id": "726b782a-cf8f-4ae3-9606-30a85123a310",
+      "name": "move to base64",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        64
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require(\"crypto\");\n\nconst privateKey = `-----BEGIN PRIVATE KEY-----\n[INSERT YOUR PRIVATE KEY HERE]\n-----END PRIVATE KEY-----`;\n\nfunction toBuffer(value) {\n  if (Buffer.isBuffer(value)) return value;\n  if (value?.type === \"Buffer\" && Array.isArray(value.data)) return Buffer.from(value.data);\n  if (Array.isArray(value)) return Buffer.from(value);\n  if (typeof value === \"string\") return Buffer.from(value, \"base64\");\n  throw new Error(\"Invalid binary input.\");\n}\n\nconst input = $input.first().json;\nconst encryptedAesKey = toBuffer(input.encryptedAesKey);\nconst initialVector = toBuffer(input.initialVector);\nconst encryptedFlowData = toBuffer(input.encryptedFlowData);\n\nif (initialVector.length !== 16) {\n  throw new Error(\"Invalid initialization vector. Expected 16 bytes.\");\n}\n\nconst aesKey = crypto.privateDecrypt(\n  {\n    key: privateKey,\n    padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,\n    oaepHash: \"sha256\"\n  },\n  encryptedAesKey\n);\n\nif (aesKey.length !== 16) {\n  throw new Error(`Invalid AES key length: expected 16 bytes, received ${aesKey.length}.`);\n}\n\nif (encryptedFlowData.length <= 16) {\n  throw new Error(\"Encrypted flow data is too short.\");\n}\n\nconst authTag = encryptedFlowData.subarray(-16);\nconst encryptedData = encryptedFlowData.subarray(0, -16);\nconst decipher = crypto.createDecipheriv(\"aes-128-gcm\", aesKey, initialVector);\ndecipher.setAuthTag(authTag);\n\nconst decryptedPayload = Buffer.concat([\n  decipher.update(encryptedData),\n  decipher.final()\n]).toString(\"utf8\");\n\nreturn [{\n  json: {\n    decryptedPayload,\n    aesKey: aesKey.toString(\"base64\"),\n    initialVector: initialVector.toString(\"base64\")\n  }\n}];"
+      },
+      "id": "caf0ee62-e546-4d14-b70a-8aed0dde47f3",
+      "name": "Decryption Code",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        352,
+        64
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require(\"crypto\");\n\nfunction toBuffer(value) {\n  if (Buffer.isBuffer(value)) return value;\n  if (value?.type === \"Buffer\" && Array.isArray(value.data)) return Buffer.from(value.data);\n  if (Array.isArray(value)) return Buffer.from(value);\n  if (typeof value === \"string\") return Buffer.from(value, \"base64\");\n  throw new Error(\"Invalid binary value.\");\n}\n\nconst initialVector = toBuffer($(\"move to base64\").first().json.initialVector);\nconst aesKey = Buffer.from($(\"Decryption Code\").first().json.aesKey, \"base64\");\nconst flowToken = $(\"Json Parser\").first().json.flow_token;\n\nif (initialVector.length !== 16) throw new Error(\"Invalid initialization vector.\");\nif (aesKey.length !== 16) throw new Error(\"Invalid AES key.\");\nif (!flowToken) throw new Error(\"Flow token is missing.\");\n\nconst appointmentItems = $input.all().map(item => item.json);\nconst date = appointmentItems[0]?.appointment_date ?? $(\"Json Parser\").first().json.date ?? \"\";\nconst startTimes = appointmentItems.flatMap(item => item.start_times ?? []);\n\nconst responseData = {\n  status: \"active\",\n  time: startTimes.map((time, index) => ({\n    id: `time_${index + 1}`,\n    title: String(time)\n  })),\n  date: date ? [{ id: \"date_1\", title: String(date) }] : []\n};\n\nconst responseMessage = JSON.stringify({\n  version: \"3.0\",\n  action: \"data_exchange\",\n  screen: \"APPOINTMENT\",\n  data: responseData,\n  flow_token: flowToken\n});\n\nconst invertedIV = Buffer.from(initialVector.map(byte => (~byte) & 0xff));\nconst cipher = crypto.createCipheriv(\"aes-128-gcm\", aesKey, invertedIV);\nconst encrypted = Buffer.concat([cipher.update(responseMessage, \"utf8\"), cipher.final()]);\nconst result = Buffer.concat([encrypted, cipher.getAuthTag()]);\n\nreturn [{ json: { body: result.toString(\"base64\") } }];"
+      },
+      "id": "6abcac71-587b-478b-998c-fef85e2a3402",
+      "name": "Encrypt Return",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1472,
+        -32
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require(\"crypto\");\n\nfunction toBuffer(value) {\n  if (Buffer.isBuffer(value)) return value;\n  if (value?.type === \"Buffer\" && Array.isArray(value.data)) return Buffer.from(value.data);\n  if (Array.isArray(value)) return Buffer.from(value);\n  if (typeof value === \"string\") return Buffer.from(value, \"base64\");\n  throw new Error(\"Invalid binary value.\");\n}\n\nconst initialVector = toBuffer($(\"move to base64\").first().json.initialVector);\nconst aesKey = Buffer.from($(\"Decryption Code\").first().json.aesKey, \"base64\");\nconst flowToken = $(\"Json Parser\").first().json.flow_token;\n\nif (initialVector.length !== 16) throw new Error(\"Invalid initialization vector.\");\nif (aesKey.length !== 16) throw new Error(\"Invalid AES key.\");\nif (!flowToken) throw new Error(\"Flow token is missing.\");\n\nconst seats = $input.first().json.seats ?? [];\n\nconst responseData = {\n  status: \"active\",\n  seats: seats.map((seat, index) => ({\n    id: `seat_${index + 1}`,\n    title: String(seat)\n  }))\n};\n\nconst responseMessage = JSON.stringify({\n  version: \"3.0\",\n  action: \"data_exchange\",\n  screen: \"SUMMARY\",\n  data: responseData,\n  flow_token: flowToken\n});\n\nconst invertedIV = Buffer.from(initialVector.map(byte => (~byte) & 0xff));\nconst cipher = crypto.createCipheriv(\"aes-128-gcm\", aesKey, invertedIV);\nconst encrypted = Buffer.concat([cipher.update(responseMessage, \"utf8\"), cipher.final()]);\nconst result = Buffer.concat([encrypted, cipher.getAuthTag()]);\n\nreturn [{ json: { body: result.toString(\"base64\") } }];"
+      },
+      "id": "50665a63-b3fb-409a-b8d3-3733847aabac",
+      "name": "Encrypt Return1",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1472,
+        208
+      ],
+      "typeVersion": 2
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Data Extraction Code",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Data Extraction Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "move to base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Json Parser": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encrypt Return": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "move to base64": {
+      "main": [
+        [
+          {
+            "node": "Decryption Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decryption Code": {
+      "main": [
+        [
+          {
+            "node": "Json Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encrypt Return1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Extraction Code": {
+      "main": [
+        [
+          {
+            "node": "Encrypt Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Extraction Code1": {
+      "main": [
+        [
+          {
+            "node": "Encrypt Return1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b445a492-6670-4955-b0b8-4b933ec74ca3",
+  "meta": {
+    "instanceId": "ca8084bef0020a301a722750d2735175cb79068254d631494fc0a25f955d6564"
+  },
+  "nodeGroups": [],
+  "id": "gtRRdAGttsLPw5yd",
+  "tags": []
+}
